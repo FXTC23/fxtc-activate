@@ -1,0 +1,92 @@
+// ======================================================
+// POST /internal/activation/verify
+// Vérifier un token d'activation
+// ======================================================
+app.post("/internal/activation/verify", requireInternal, async (req, res) => {
+  try {
+    const { token_hash } = req.body || {};
+    if (!token_hash) {
+      return res.status(400).json({ ok: false, error: "token_hash manquant" });
+    }
+
+    const q = await pool.query(
+      `SELECT u.username, u.email, c.name AS company
+       FROM users u
+       LEFT JOIN companies c ON c.id = u.company_id
+       WHERE u.activation_token_hash = $1
+         AND u.status = 'pending_activation'
+         AND u.activation_expires_at > now()
+       LIMIT 1`,
+      [token_hash]
+    );
+
+    if (!q.rowCount) {
+      return res.status(400).json({
+        ok: false,
+        error: "Token invalide ou expiré",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      username: q.rows[0].username,
+      email: q.rows[0].email,
+      company: q.rows[0].company,
+    });
+  } catch (err) {
+    console.error("POST /internal/activation/verify error:", err);
+    return res.status(500).json({ ok: false, error: safeError(err) });
+  }
+});
+
+// ======================================================
+// POST /internal/activation/activate
+// Activer le compte — définir mdp + passer status active
+// ======================================================
+app.post("/internal/activation/activate", requireInternal, async (req, res) => {
+  try {
+    const { token_hash, password } = req.body || {};
+
+    if (!token_hash || !password) {
+      return res.status(400).json({ ok: false, error: "Paramètres manquants" });
+    }
+
+    // Vérifier token valide
+    const q = await pool.query(
+      `SELECT id, username, email
+       FROM users
+       WHERE activation_token_hash = $1
+         AND status = 'pending_activation'
+         AND activation_expires_at > now()
+       LIMIT 1`,
+      [token_hash]
+    );
+
+    if (!q.rowCount) {
+      return res.status(400).json({
+        ok: false,
+        error: "Token invalide ou expiré",
+      });
+    }
+
+    const user = q.rows[0];
+    const passwordHash = bcrypt.hashSync(password, 12);
+
+    // Activer le compte
+    await pool.query(
+      `UPDATE users SET
+        password_hash = $1,
+        status = 'active',
+        activated_at = now(),
+        activation_token_hash = NULL,
+        activation_expires_at = NULL
+       WHERE id = $2`,
+      [passwordHash, user.id]
+    );
+
+    return res.json({ ok: true, username: user.username });
+  } catch (err) {
+    console.error("POST /internal/activation/activate error:", err);
+    return res.status(500).json({ ok: false, error: safeError(err) });
+  }
+});
