@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Activation de compte — FXTC</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/libsodium-wrappers-sumo/0.7.13/libsodium-wrappers-sumo.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -33,16 +32,8 @@
       color: #535456;
       margin-bottom: 8px;
     }
-    h1 {
-      font-size: 24px;
-      font-weight: 700;
-      margin-bottom: 6px;
-    }
-    .subtitle {
-      font-size: 13px;
-      color: #8d8f91;
-      margin-bottom: 32px;
-    }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 13px; color: #8d8f91; margin-bottom: 32px; }
     .user-info {
       background: #f2f2f2;
       border-radius: 12px;
@@ -52,12 +43,7 @@
     }
     .user-info .label { color: #8d8f91; margin-bottom: 2px; }
     .user-info .value { font-weight: 600; }
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 6px;
-    }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
     input {
       width: 100%;
       border: 1px solid #c0c3c1;
@@ -140,24 +126,26 @@
     </div>
   </div>
 
-  <script>
-    // ← À remplacer par ton URL vault-api en prod
+  <script type="module">
     const VAULT_API = "http://100.127.251.73:3000";
+
+    // Charger libsodium
+    const sodiumModule = await import("https://cdn.jsdelivr.net/npm/libsodium-wrappers-sumo@0.7.13/dist/modules/libsodium-wrappers-sumo.mjs");
+    const sodium = sodiumModule.default || sodiumModule;
+    await sodium.ready;
+    window.__sodium = sodium;
+    console.log("sodium ready ✓", typeof sodium.crypto_kx_keypair);
 
     function show(id) { document.getElementById(id).style.display = ""; }
     function hide(id) { document.getElementById(id).style.display = "none"; }
     function setError(msg) {
-      const el = document.getElementById("error");
-      el.textContent = msg;
+      document.getElementById("error").textContent = msg;
       show("error");
     }
     function clearError() { hide("error"); }
 
-    // Récupérer le token depuis l'URL
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
-
-    let userInfo = null;
 
     async function init() {
       if (!token) {
@@ -165,21 +153,15 @@
         setError("Lien d'activation invalide — token manquant.");
         return;
       }
-
       try {
         const res = await fetch(`${VAULT_API}/auth/activate/${token}`);
         const data = await res.json().catch(() => ({}));
-
         if (!res.ok || !data.ok) {
           hide("loading");
           setError(data.error || "Lien invalide ou expiré.");
           return;
         }
-
-        userInfo = data;
         hide("loading");
-
-        // Afficher les infos user
         document.getElementById("user-info").innerHTML = `
           <div class="label">Compte à activer</div>
           <div class="value">${data.username}</div>
@@ -193,10 +175,8 @@
       }
     }
 
-    async function activate() {
-      console.log("globals:", typeof sodium, typeof _sodium, typeof libsodium, typeof LibSodium);
+    window.activate = async function() {
       clearError();
-
       const password = document.getElementById("password").value;
       const password2 = document.getElementById("password2").value;
       const btn = document.getElementById("btn");
@@ -214,14 +194,13 @@
       btn.textContent = "Génération des clés…";
 
       try {
-        // Attendre libsodium
-        await libsodium_wrappers_sumo.ready;
-        const sodium = libsodium_wrappers_sumo;
+        const sodium = window.__sodium;
+        if (!sodium) throw new Error("Libsodium non chargé — rechargez la page.");
 
-        // 1) Générer paire de clés X25519
+        // 1) Paire de clés X25519
         const keyPair = sodium.crypto_kx_keypair();
 
-        // 2) Dériver clé de protection via Argon2id
+        // 2) Argon2id
         const kdfSalt = sodium.randombytes_buf(16);
         const passwordBytes = sodium.from_string(password);
         const derivedKey = sodium.crypto_pwhash(
@@ -233,7 +212,7 @@
           sodium.crypto_pwhash_ALG_ARGON2ID13
         );
 
-        // 3) Chiffrer la clé privée avec XChaCha20-Poly1305
+        // 3) Chiffrer clé privée
         const nonce = sodium.randombytes_buf(24);
         const encryptedPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
           keyPair.privateKey,
@@ -245,7 +224,7 @@
 
         btn.textContent = "Activation en cours…";
 
-        // 4) Envoyer au serveur
+        // 4) Envoyer
         const payload = {
           token,
           password,
@@ -263,12 +242,8 @@
         });
 
         const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || "Erreur activation");
 
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || "Erreur activation");
-        }
-
-        // Succès
         hide("form");
         hide("user-info");
         show("success");
@@ -278,9 +253,8 @@
         btn.disabled = false;
         btn.textContent = "Activer mon compte";
       }
-    }
+    };
 
-    // Lancer la vérification du token au chargement
     init();
   </script>
 </body>
