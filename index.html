@@ -6,6 +6,7 @@
   <title>Activation de compte — FXTC</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #f5f5f5;
@@ -16,6 +17,7 @@
       padding: 24px;
       color: #535456;
     }
+
     .card {
       background: white;
       border-radius: 20px;
@@ -25,6 +27,7 @@
       max-width: 420px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.08);
     }
+
     .logo {
       font-size: 13px;
       font-weight: 700;
@@ -32,8 +35,19 @@
       color: #535456;
       margin-bottom: 8px;
     }
-    h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
-    .subtitle { font-size: 13px; color: #8d8f91; margin-bottom: 32px; }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #8d8f91;
+      margin-bottom: 32px;
+    }
+
     .user-info {
       background: #f2f2f2;
       border-radius: 12px;
@@ -41,9 +55,23 @@
       margin-bottom: 24px;
       font-size: 13px;
     }
-    .user-info .label { color: #8d8f91; margin-bottom: 2px; }
-    .user-info .value { font-weight: 600; }
-    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+
+    .user-info .label {
+      color: #8d8f91;
+      margin-bottom: 2px;
+    }
+
+    .user-info .value {
+      font-weight: 600;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
     input {
       width: 100%;
       border: 1px solid #c0c3c1;
@@ -56,7 +84,12 @@
       margin-bottom: 16px;
       transition: border 0.15s;
     }
-    input:focus { border-color: #535456; background: white; }
+
+    input:focus {
+      border-color: #535456;
+      background: white;
+    }
+
     .btn {
       width: 100%;
       background: #535456;
@@ -70,8 +103,16 @@
       transition: opacity 0.15s;
       margin-top: 8px;
     }
-    .btn:hover { opacity: 0.9; }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
     .error {
       background: #fff0f0;
       border: 1px solid #fcc;
@@ -81,6 +122,7 @@
       color: #cc3333;
       margin-bottom: 16px;
     }
+
     .success {
       background: #f0fff4;
       border: 1px solid #9ae6b4;
@@ -90,6 +132,7 @@
       color: #276749;
       text-align: center;
     }
+
     .step {
       font-size: 12px;
       color: #8d8f91;
@@ -107,152 +150,159 @@
     <h1>Activation de compte</h1>
     <p class="subtitle">Choisissez votre mot de passe pour accéder à votre espace Vault.</p>
 
-    <div id="loading" class="step">Vérification du lien d'activation…</div>
+    <div id="loading" class="step">Vérification du lien d’activation…</div>
     <div id="user-info" class="user-info" style="display:none"></div>
     <div id="error" class="error" style="display:none"></div>
+
     <div id="form" style="display:none">
       <div class="step">
-        🔐 Vos clés de chiffrement seront générées automatiquement à partir de votre mot de passe.
+        Votre coffre chiffré sera initialisé automatiquement lors de votre première connexion à l’application.
       </div>
+
       <label for="password">Mot de passe</label>
-      <input type="password" id="password" placeholder="Minimum 8 caractères" minlength="8" />
+      <input
+        type="password"
+        id="password"
+        placeholder="Minimum 8 caractères"
+        minlength="8"
+        autocomplete="new-password"
+      />
+
       <label for="password2">Confirmer le mot de passe</label>
-      <input type="password" id="password2" placeholder="Répétez votre mot de passe" />
+      <input
+        type="password"
+        id="password2"
+        placeholder="Répétez votre mot de passe"
+        autocomplete="new-password"
+      />
+
       <button class="btn" id="btn" onclick="activate()">Activer mon compte</button>
     </div>
+
     <div id="success" class="success" style="display:none">
-      ✅ Compte activé avec succès !<br/><br/>
+      ✅ Compte activé avec succès !<br /><br />
       Vous pouvez maintenant vous connecter via <strong>CloudChain Platform</strong>.
     </div>
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers-sumo@0.7.13/dist/libsodium-wrappers-sumo.min.js"></script>
+  <script>
+    const VAULT_API = "http://100.127.251.73:3000";
 
-<script type="module">
-  const VAULT_API = "http://100.127.251.73:3000";
-
-  await window.sodium.ready;
-  const sodium = window.sodium;
-  window.__sodium = sodium;
-
-  console.log("sodium ready ✓", typeof sodium.crypto_kx_keypair);
-
-  function show(id) { document.getElementById(id).style.display = ""; }
-  function hide(id) { document.getElementById(id).style.display = "none"; }
-  function setError(msg) {
-    document.getElementById("error").textContent = msg;
-    show("error");
-  }
-  function clearError() { hide("error"); }
-
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get("token");
-
-  async function init() {
-    if (!token) {
-      hide("loading");
-      setError("Lien d'activation invalide — token manquant.");
-      return;
+    function show(id) {
+      document.getElementById(id).style.display = "";
     }
-    try {
-      const res = await fetch(`${VAULT_API}/auth/activate/${token}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
+
+    function hide(id) {
+      document.getElementById(id).style.display = "none";
+    }
+
+    function setError(msg) {
+      document.getElementById("error").textContent = msg;
+      show("error");
+    }
+
+    function clearError() {
+      hide("error");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    async function init() {
+      if (!token) {
         hide("loading");
-        setError(data.error || "Lien invalide ou expiré.");
+        setError("Lien d'activation invalide — token manquant.");
         return;
       }
-      hide("loading");
-      document.getElementById("user-info").innerHTML = `
-        <div class="label">Compte à activer</div>
-        <div class="value">${data.username}</div>
-        ${data.company ? `<div style="font-size:12px;color:#8d8f91;margin-top:2px">${data.company}</div>` : ""}
-      `;
-      show("user-info");
-      show("form");
-    } catch (e) {
-      hide("loading");
-      setError("Impossible de contacter le serveur. Vérifiez votre connexion.");
+
+      try {
+        const res = await fetch(`${VAULT_API}/auth/activate/${encodeURIComponent(token)}`);
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.ok) {
+          hide("loading");
+          setError(data.error || "Lien invalide ou expiré.");
+          return;
+        }
+
+        hide("loading");
+
+        document.getElementById("user-info").innerHTML = `
+          <div class="label">Compte à activer</div>
+          <div class="value">${escapeHtml(data.username || "—")}</div>
+          ${
+            data.company
+              ? `<div style="font-size:12px;color:#8d8f91;margin-top:2px">${escapeHtml(data.company)}</div>`
+              : ""
+          }
+        `;
+
+        show("user-info");
+        show("form");
+      } catch (e) {
+        hide("loading");
+        setError("Impossible de contacter le serveur. Vérifiez votre connexion.");
+      }
     }
-  }
 
-  window.activate = async function() {
-    clearError();
-    const password = document.getElementById("password").value;
-    const password2 = document.getElementById("password2").value;
-    const btn = document.getElementById("btn");
+    async function activate() {
+      clearError();
 
-    if (password.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.");
-      return;
-    }
-    if (password !== password2) {
-      setError("Les mots de passe ne correspondent pas.");
-      return;
-    }
+      const password = document.getElementById("password").value;
+      const password2 = document.getElementById("password2").value;
+      const btn = document.getElementById("btn");
 
-    btn.disabled = true;
-    btn.textContent = "Génération des clés…";
+      if (password.length < 8) {
+        setError("Le mot de passe doit contenir au moins 8 caractères.");
+        return;
+      }
 
-    try {
-      const sodium = window.__sodium;
-      if (!sodium) throw new Error("Libsodium non chargé — rechargez la page.");
+      if (password !== password2) {
+        setError("Les mots de passe ne correspondent pas.");
+        return;
+      }
 
-      const keyPair = sodium.crypto_kx_keypair();
-
-      const kdfSalt = sodium.randombytes_buf(16);
-      const passwordBytes = sodium.from_string(password);
-      const derivedKey = sodium.crypto_pwhash(
-        32,
-        passwordBytes,
-        kdfSalt,
-        2,
-        67108864,
-        sodium.crypto_pwhash_ALG_ARGON2ID13
-      );
-
-      const nonce = sodium.randombytes_buf(24);
-      const encryptedPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-        keyPair.privateKey,
-        null,
-        null,
-        nonce,
-        derivedKey
-      );
-
+      btn.disabled = true;
       btn.textContent = "Activation en cours…";
 
-      const payload = {
-        token,
-        password,
-        public_key: sodium.to_base64(keyPair.publicKey),
-        private_key_encrypted: sodium.to_base64(encryptedPrivateKey),
-        private_key_nonce: sodium.to_base64(nonce),
-        kdf_salt: sodium.to_base64(kdfSalt),
-        kdf_params: { algorithm: "argon2id", opslimit: 2, memlimit: 67108864 },
-      };
+      try {
+        const res = await fetch(`${VAULT_API}/auth/activate-account`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            token,
+            password
+          })
+        });
 
-      const res = await fetch(`${VAULT_API}/auth/activate-account`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+        const data = await res.json().catch(() => ({}));
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.error || "Erreur activation");
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "Erreur activation");
+        }
 
-      hide("form");
-      hide("user-info");
-      show("success");
-
-    } catch (e) {
-      setError(e.message || "Erreur lors de l'activation.");
-      btn.disabled = false;
-      btn.textContent = "Activer mon compte";
+        hide("form");
+        hide("user-info");
+        show("success");
+      } catch (e) {
+        setError(e.message || "Erreur lors de l'activation.");
+        btn.disabled = false;
+        btn.textContent = "Activer mon compte";
+      }
     }
-  };
 
-  init();
-</script>
+    init();
+  </script>
 </body>
 </html>
