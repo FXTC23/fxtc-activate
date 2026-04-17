@@ -130,7 +130,7 @@
     const VAULT_API = "http://100.127.251.73:3000";
 
     // Charger libsodium
-    const sodiumModule = await import("https://cdn.jsdelivr.net/npm/libsodium-wrappers-sumo@0.7.13/dist/modules/libsodium-wrappers-sumo.mjs");
+    const sodiumModule = await import("https://unpkg.com/libsodium-wrappers-sumo@0.7.13/dist/modules/libsodium-wrappers-sumo.js");
     const sodium = sodiumModule.default || sodiumModule;
     await sodium.ready;
     window.__sodium = sodium;
