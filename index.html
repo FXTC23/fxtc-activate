@@ -126,136 +126,133 @@
     </div>
   </div>
 
-  <script type="module">
-    const VAULT_API = "http://100.127.251.73:3000";
+<script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers-sumo@0.7.13/dist/libsodium-wrappers-sumo.min.js"></script>
 
-    // Charger libsodium
-    const sodiumModule = await import("https://unpkg.com/libsodium-wrappers-sumo@0.7.13/dist/modules/libsodium-wrappers-sumo.js");
-    const sodium = sodiumModule.default || sodiumModule;
-    await sodium.ready;
-    window.__sodium = sodium;
-    console.log("sodium ready ✓", typeof sodium.crypto_kx_keypair);
+<script type="module">
+  const VAULT_API = "http://100.127.251.73:3000";
 
-    function show(id) { document.getElementById(id).style.display = ""; }
-    function hide(id) { document.getElementById(id).style.display = "none"; }
-    function setError(msg) {
-      document.getElementById("error").textContent = msg;
-      show("error");
+  await window.sodium.ready;
+  const sodium = window.sodium;
+  window.__sodium = sodium;
+
+  console.log("sodium ready ✓", typeof sodium.crypto_kx_keypair);
+
+  function show(id) { document.getElementById(id).style.display = ""; }
+  function hide(id) { document.getElementById(id).style.display = "none"; }
+  function setError(msg) {
+    document.getElementById("error").textContent = msg;
+    show("error");
+  }
+  function clearError() { hide("error"); }
+
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+
+  async function init() {
+    if (!token) {
+      hide("loading");
+      setError("Lien d'activation invalide — token manquant.");
+      return;
     }
-    function clearError() { hide("error"); }
-
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-
-    async function init() {
-      if (!token) {
+    try {
+      const res = await fetch(`${VAULT_API}/auth/activate/${token}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
         hide("loading");
-        setError("Lien d'activation invalide — token manquant.");
+        setError(data.error || "Lien invalide ou expiré.");
         return;
       }
-      try {
-        const res = await fetch(`${VAULT_API}/auth/activate/${token}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) {
-          hide("loading");
-          setError(data.error || "Lien invalide ou expiré.");
-          return;
-        }
-        hide("loading");
-        document.getElementById("user-info").innerHTML = `
-          <div class="label">Compte à activer</div>
-          <div class="value">${data.username}</div>
-          ${data.company ? `<div style="font-size:12px;color:#8d8f91;margin-top:2px">${data.company}</div>` : ""}
-        `;
-        show("user-info");
-        show("form");
-      } catch (e) {
-        hide("loading");
-        setError("Impossible de contacter le serveur. Vérifiez votre connexion.");
-      }
+      hide("loading");
+      document.getElementById("user-info").innerHTML = `
+        <div class="label">Compte à activer</div>
+        <div class="value">${data.username}</div>
+        ${data.company ? `<div style="font-size:12px;color:#8d8f91;margin-top:2px">${data.company}</div>` : ""}
+      `;
+      show("user-info");
+      show("form");
+    } catch (e) {
+      hide("loading");
+      setError("Impossible de contacter le serveur. Vérifiez votre connexion.");
+    }
+  }
+
+  window.activate = async function() {
+    clearError();
+    const password = document.getElementById("password").value;
+    const password2 = document.getElementById("password2").value;
+    const btn = document.getElementById("btn");
+
+    if (password.length < 8) {
+      setError("Le mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    if (password !== password2) {
+      setError("Les mots de passe ne correspondent pas.");
+      return;
     }
 
-    window.activate = async function() {
-      clearError();
-      const password = document.getElementById("password").value;
-      const password2 = document.getElementById("password2").value;
-      const btn = document.getElementById("btn");
+    btn.disabled = true;
+    btn.textContent = "Génération des clés…";
 
-      if (password.length < 8) {
-        setError("Le mot de passe doit contenir au moins 8 caractères.");
-        return;
-      }
-      if (password !== password2) {
-        setError("Les mots de passe ne correspondent pas.");
-        return;
-      }
+    try {
+      const sodium = window.__sodium;
+      if (!sodium) throw new Error("Libsodium non chargé — rechargez la page.");
 
-      btn.disabled = true;
-      btn.textContent = "Génération des clés…";
+      const keyPair = sodium.crypto_kx_keypair();
 
-      try {
-        const sodium = window.__sodium;
-        if (!sodium) throw new Error("Libsodium non chargé — rechargez la page.");
+      const kdfSalt = sodium.randombytes_buf(16);
+      const passwordBytes = sodium.from_string(password);
+      const derivedKey = sodium.crypto_pwhash(
+        32,
+        passwordBytes,
+        kdfSalt,
+        2,
+        67108864,
+        sodium.crypto_pwhash_ALG_ARGON2ID13
+      );
 
-        // 1) Paire de clés X25519
-        const keyPair = sodium.crypto_kx_keypair();
+      const nonce = sodium.randombytes_buf(24);
+      const encryptedPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+        keyPair.privateKey,
+        null,
+        null,
+        nonce,
+        derivedKey
+      );
 
-        // 2) Argon2id
-        const kdfSalt = sodium.randombytes_buf(16);
-        const passwordBytes = sodium.from_string(password);
-        const derivedKey = sodium.crypto_pwhash(
-          32,
-          passwordBytes,
-          kdfSalt,
-          2,
-          67108864,
-          sodium.crypto_pwhash_ALG_ARGON2ID13
-        );
+      btn.textContent = "Activation en cours…";
 
-        // 3) Chiffrer clé privée
-        const nonce = sodium.randombytes_buf(24);
-        const encryptedPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-          keyPair.privateKey,
-          null,
-          null,
-          nonce,
-          derivedKey
-        );
+      const payload = {
+        token,
+        password,
+        public_key: sodium.to_base64(keyPair.publicKey),
+        private_key_encrypted: sodium.to_base64(encryptedPrivateKey),
+        private_key_nonce: sodium.to_base64(nonce),
+        kdf_salt: sodium.to_base64(kdfSalt),
+        kdf_params: { algorithm: "argon2id", opslimit: 2, memlimit: 67108864 },
+      };
 
-        btn.textContent = "Activation en cours…";
+      const res = await fetch(`${VAULT_API}/auth/activate-account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-        // 4) Envoyer
-        const payload = {
-          token,
-          password,
-          public_key: sodium.to_base64(keyPair.publicKey),
-          private_key_encrypted: sodium.to_base64(encryptedPrivateKey),
-          private_key_nonce: sodium.to_base64(nonce),
-          kdf_salt: sodium.to_base64(kdfSalt),
-          kdf_params: { algorithm: "argon2id", opslimit: 2, memlimit: 67108864 },
-        };
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || "Erreur activation");
 
-        const res = await fetch(`${VAULT_API}/auth/activate-account`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      hide("form");
+      hide("user-info");
+      show("success");
 
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) throw new Error(data.error || "Erreur activation");
+    } catch (e) {
+      setError(e.message || "Erreur lors de l'activation.");
+      btn.disabled = false;
+      btn.textContent = "Activer mon compte";
+    }
+  };
 
-        hide("form");
-        hide("user-info");
-        show("success");
-
-      } catch (e) {
-        setError(e.message || "Erreur lors de l'activation.");
-        btn.disabled = false;
-        btn.textContent = "Activer mon compte";
-      }
-    };
-
-    init();
-  </script>
+  init();
+</script>
 </body>
 </html>
