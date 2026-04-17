@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Activation de compte — FXTC</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/libsodium-wrappers-sumo/0.7.13/libsodium-wrappers-sumo.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers-sumo@0.7.13/dist/modules/libsodium-wrappers-sumo.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -214,7 +214,8 @@
 
       try {
         // Attendre libsodium
-        await sodium.ready;
+        await _sodium.ready;
+        const sodium = _sodium;
 
         // 1) Générer paire de clés X25519
         const keyPair = sodium.crypto_kx_keypair();
